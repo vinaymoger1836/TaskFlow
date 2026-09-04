@@ -1,19 +1,25 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { Task, FilterOption, SortOption, TaskStats } from '@/types/todo';
 import { loadTasksFromStorage, saveTasksToStorage } from '@/utils/storage';
-import { isTaskOverdue, getDefaultDueDateTime, getLocalISOString } from '@/utils/dateUtils';
+import { isTaskOverdue, getDefaultDueDateTime } from '@/utils/dateUtils';
 import { TaskInput } from './TaskInput';
 import { TaskList } from './TaskList';
 import { TaskFilters } from './TaskFilters';
 import { TaskSort } from './TaskSort';
 import { TaskStatsComponent } from './TaskStats';
-import { CheckSquare, Trash2, Bot } from 'lucide-react';
-import { useCopilotAction, useCopilotReadable } from '@copilotkit/react-core';
-import { CopilotSidebar } from '@copilotkit/react-ui';
+import { CheckSquare, Trash2, Bot, Sparkles } from 'lucide-react';
+import { CopilotKit, useCopilotAction, useCopilotReadable } from '@copilotkit/react-core';
 
-export const TodoApp: React.FC = () => {
+// Dynamically import CopilotSidebar on client only to keep layout fast and prevent timeouts
+const CopilotSidebarWrapper = dynamic(
+  () => import('./CopilotSidebarWrapper'),
+  { ssr: false }
+);
+
+const TodoContent: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [filter, setFilter] = useState<FilterOption>('all');
@@ -156,7 +162,6 @@ export const TodoApp: React.FC = () => {
   // COPILOTKIT INTEGRATION: AI State Awareness & Automation Actions
   // -------------------------------------------------------------
 
-  // 1. Give the AI real-time context about tasks, current time, and overdue items
   useCopilotReadable({
     description: 'Current state of user tasks, due dates, overdue statuses, and summary statistics',
     value: {
@@ -175,7 +180,6 @@ export const TodoApp: React.FC = () => {
     },
   });
 
-  // 2. Action: Add a new task
   useCopilotAction({
     name: 'addTask',
     description: 'Create a new task with a title, optional description, and a due date/time (ISO 8601 string).',
@@ -210,7 +214,6 @@ export const TodoApp: React.FC = () => {
     },
   });
 
-  // 3. Action: Delete task
   useCopilotAction({
     name: 'deleteTask',
     description: 'Delete a task from the list by its ID or by matching title.',
@@ -234,7 +237,6 @@ export const TodoApp: React.FC = () => {
     },
   });
 
-  // 4. Action: Toggle or set task completion
   useCopilotAction({
     name: 'setTaskCompletion',
     description: 'Mark a task as complete or incomplete by its ID or title.',
@@ -266,7 +268,6 @@ export const TodoApp: React.FC = () => {
     },
   });
 
-  // 5. Action: Reschedule task (especially useful for overdue tasks!)
   useCopilotAction({
     name: 'rescheduleTask',
     description: 'Update the due date and time of an existing task (e.g. reschedule overdue items).',
@@ -296,7 +297,6 @@ export const TodoApp: React.FC = () => {
     },
   });
 
-  // 6. Action: Filter and Search
   useCopilotAction({
     name: 'filterTasks',
     description: 'Filter or search the tasks in the view.',
@@ -325,7 +325,6 @@ export const TodoApp: React.FC = () => {
     },
   });
 
-  // 7. Action: Clear all completed tasks
   useCopilotAction({
     name: 'clearCompletedTasks',
     description: 'Remove all finished / completed tasks from the list.',
@@ -360,7 +359,7 @@ export const TodoApp: React.FC = () => {
             </h1>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Stay on track with smart due dates, overdue alerts, and AI automation.
+            Stay on track with smart due dates, overdue alerts, and Google Gemini AI.
           </p>
         </div>
 
@@ -423,21 +422,16 @@ export const TodoApp: React.FC = () => {
         />
       </main>
 
-      {/* Copilot AI Assistant Sidebar */}
-      <CopilotSidebar
-        instructions={
-          'You are TaskFlow AI, an intelligent personal task manager. ' +
-          'You can add tasks with date/time, mark tasks complete or incomplete, delete tasks, ' +
-          'reschedule overdue tasks, and filter or search tasks. ' +
-          'Always use the provided actions (addTask, deleteTask, setTaskCompletion, rescheduleTask, filterTasks, clearCompletedTasks) to modify the state directly.'
-        }
-        labels={{
-          title: 'TaskFlow AI Copilot',
-          initial: 'Hi! I can help automate your tasks. Try asking:\n• "Add a task: Review roadmap tomorrow at 4 PM"\n• "What tasks are overdue?"\n• "Mark the completed tasks done"\n• "Reschedule overdue tasks to tomorrow"',
-        }}
-        defaultOpen={false}
-        clickOutsideToClose={true}
-      />
+      {/* Copilot AI Assistant Sidebar (Lazy-loaded client-side) */}
+      <CopilotSidebarWrapper />
     </div>
+  );
+};
+
+export const TodoApp: React.FC = () => {
+  return (
+    <CopilotKit runtimeUrl="/api/copilotkit">
+      <TodoContent />
+    </CopilotKit>
   );
 };
