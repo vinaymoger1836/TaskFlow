@@ -157,3 +157,21 @@ export function getDefaultDueDateTime(): string {
   const date = new Date(Date.now() + 2 * 60 * 60 * 1000);
   return getLocalISOString(date);
 }
+
+/**
+ * Check if a date/time string is in the past (with a 60-second grace window for user interaction latency)
+ */
+export function isDateTimeInPast(dateTimeStr: string, gracePeriodMs: number = 60000): boolean {
+  if (!dateTimeStr) return false;
+  const date = new Date(dateTimeStr);
+  if (isNaN(date.getTime())) return false;
+  return date.getTime() < Date.now() - gracePeriodMs;
+}
+
+/**
+ * Get current local ISO string for HTML input min attribute (YYYY-MM-DDTHH:mm)
+ */
+export function getMinDueDateTime(): string {
+  return getLocalISOString(new Date());
+}
+

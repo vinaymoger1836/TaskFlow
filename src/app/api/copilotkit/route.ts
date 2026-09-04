@@ -75,14 +75,24 @@ const getHandler = () => {
             }
           }
 
+          const now = new Date();
+          const currentTimestamp = now.toISOString();
+          const currentReadable = now.toLocaleString('en-US', {
+            dateStyle: 'full',
+            timeStyle: 'short',
+          });
+
           const systemPrompt = [
             'You are the AI assistant for TaskFlow, a modern task and todo manager.',
+            `Current Date and Time: ${currentReadable} (${currentTimestamp}).`,
+            'IMPORTANT SCHEDULING RULE: You must NEVER schedule, add, update, or reschedule a task with a due date in the past. All task due dates (dueDateTime) MUST be in the future relative to the current time. If the user explicitly asks to schedule a task in the past, politely decline and explain that tasks can only be scheduled for future dates/times, and prompt them for a future date/time.',
             'Help the user manage their tasks using the provided tools: addTask, updateTask, deleteTask, setTaskCompletion, rescheduleTask, filterTasks, and clearCompletedTasks.',
             'Always execute the appropriate tool when asked to add, modify, delete, reschedule, or complete tasks.',
             ...contextParts,
           ]
             .filter(Boolean)
             .join('\n\n');
+
 
           return streamText({
             model: getLanguageModel(),

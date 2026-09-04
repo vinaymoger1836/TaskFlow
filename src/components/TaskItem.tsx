@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Task } from '@/types/todo';
-import { getDueStatus, formatDateTime, getLocalISOString } from '@/utils/dateUtils';
+import { getDueStatus, formatDateTime, getLocalISOString, isDateTimeInPast, getMinDueDateTime } from '@/utils/dateUtils';
 import {
   Check,
   Trash2,
@@ -32,17 +32,28 @@ export const TaskItem: React.FC<TaskItemProps> = ({
   const [editTitle, setEditTitle] = useState(task.title);
   const [editDescription, setEditDescription] = useState(task.description || '');
   const [editDueDateTime, setEditDueDateTime] = useState(task.dueDateTime);
+  const [editError, setEditError] = useState('');
 
   const dueStatus = getDueStatus(task.dueDateTime, task.completed);
   const isOverdue = dueStatus.isOverdue;
 
   const handleSaveEdit = () => {
-    if (!editTitle.trim()) return;
+    if (!editTitle.trim()) {
+      setEditError('Task title cannot be empty');
+      return;
+    }
+
+    if (isDateTimeInPast(editDueDateTime)) {
+      setEditError('Due date and time cannot be in the past');
+      return;
+    }
+
     onUpdate(task.id, {
       title: editTitle.trim(),
       description: editDescription.trim() || undefined,
       dueDateTime: editDueDateTime,
     });
+    setEditError('');
     setIsEditing(false);
   };
 
@@ -50,8 +61,10 @@ export const TaskItem: React.FC<TaskItemProps> = ({
     setEditTitle(task.title);
     setEditDescription(task.description || '');
     setEditDueDateTime(task.dueDateTime);
+    setEditError('');
     setIsEditing(false);
   };
+
 
   return (
     <div
@@ -90,13 +103,22 @@ export const TaskItem: React.FC<TaskItemProps> = ({
             <span className="text-xs text-slate-500">Due:</span>
             <input
               type="datetime-local"
+              min={getMinDueDateTime()}
               value={editDueDateTime}
-              onChange={(e) => setEditDueDateTime(e.target.value)}
+              onChange={(e) => {
+                setEditDueDateTime(e.target.value);
+                if (editError) setEditError('');
+              }}
               className="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
             />
           </div>
 
+          {editError && (
+            <p className="text-xs text-rose-500 font-medium">{editError}</p>
+          )}
+
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+
             <button
               onClick={handleCancelEdit}
               className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium transition cursor-pointer"

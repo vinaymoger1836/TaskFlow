@@ -4,8 +4,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { Task, FilterOption, SortOption, TaskStats } from '@/types/todo';
 import { loadTasksFromStorage, saveTasksToStorage } from '@/utils/storage';
-import { isTaskOverdue, getDefaultDueDateTime } from '@/utils/dateUtils';
+import { isTaskOverdue, getDefaultDueDateTime, isDateTimeInPast } from '@/utils/dateUtils';
 import { TaskInput } from './TaskInput';
+
 import { TaskList } from './TaskList';
 import { TaskFilters } from './TaskFilters';
 import { TaskSort } from './TaskSort';
@@ -116,6 +117,10 @@ const TodoContent: React.FC = () => {
     description?: string;
     dueDateTime: string;
   }) => {
+    if (isDateTimeInPast(newTaskData.dueDateTime)) {
+      throw new Error('Cannot schedule a task with a past due date and time.');
+    }
+
     const newTask: Task = {
       id: `task-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       title: newTaskData.title,
@@ -149,10 +154,14 @@ const TodoContent: React.FC = () => {
   };
 
   const handleUpdate = (id: string, updates: Partial<Task>) => {
+    if (updates.dueDateTime && isDateTimeInPast(updates.dueDateTime)) {
+      return;
+    }
     setTasks((prev) =>
       prev.map((t) => (t.id === id ? { ...t, ...updates } : t))
     );
   };
+
 
   const handleClearCompleted = () => {
     setTasks((prev) => prev.filter((t) => !t.completed));
@@ -208,12 +217,19 @@ const TodoContent: React.FC = () => {
     ],
     handler: async ({ title, dueDateTime, description }) => {
       const finalDue = dueDateTime || getDefaultDueDateTime();
-      const created = handleAddTask({
-        title,
-        dueDateTime: finalDue,
-        description,
-      });
-      return `Created task: "${created.title}" with due date ${created.dueDateTime}.`;
+      if (isDateTimeInPast(finalDue)) {
+        return `Cannot schedule task "${title}" in the past (${finalDue}). Current time is ${new Date().toLocaleString()}. Please provide a future due date and time.`;
+      }
+      try {
+        const created = handleAddTask({
+          title,
+          dueDateTime: finalDue,
+          description,
+        });
+        return `Created task: "${created.title}" with due date ${created.dueDateTime}.`;
+      } catch (err: any) {
+        return `Failed to add task: ${err.message}`;
+      }
     },
   });
 
@@ -253,6 +269,13 @@ const TodoContent: React.FC = () => {
       if (!target) {
         return `Could not find a task matching "${identifier}".`;
       }
+
+      if (dueDateTime !== undefined && dueDateTime.trim()) {
+        if (isDateTimeInPast(dueDateTime.trim())) {
+          return `Cannot update due date to a past date/time (${dueDateTime.trim()}). Current time is ${new Date().toLocaleString()}. Please provide a future date and time.`;
+        }
+      }
+
       const updates: Partial<Task> = {};
       if (title !== undefined && title.trim()) updates.title = title.trim();
       if (description !== undefined) updates.description = description.trim() || undefined;
@@ -336,6 +359,10 @@ const TodoContent: React.FC = () => {
       },
     ],
     handler: async ({ identifier, newDueDateTime }) => {
+      if (isDateTimeInPast(newDueDateTime)) {
+        return `Cannot reschedule task to a past date/time (${newDueDateTime}). Current time is ${new Date().toLocaleString()}. Please provide a future date and time.`;
+      }
+
       const target = tasks.find(
         (t) => t.id === identifier || t.title.toLowerCase().includes(identifier.toLowerCase())
       );
@@ -346,6 +373,7 @@ const TodoContent: React.FC = () => {
       return `Rescheduled "${target.title}" to ${newDueDateTime}.`;
     },
   });
+
 
   useCopilotAction({
     name: 'filterTasks',

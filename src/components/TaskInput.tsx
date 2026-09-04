@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Plus, Calendar, Clock, Sparkles } from 'lucide-react';
-import { getDefaultDueDateTime, getLocalISOString } from '@/utils/dateUtils';
+import { Plus, Calendar, Clock, Sparkles, AlertCircle } from 'lucide-react';
+import { getDefaultDueDateTime, getLocalISOString, isDateTimeInPast, getMinDueDateTime } from '@/utils/dateUtils';
 
 interface TaskInputProps {
   onAddTask: (task: {
@@ -31,6 +31,11 @@ export const TaskInput: React.FC<TaskInputProps> = ({ onAddTask }) => {
       return;
     }
 
+    if (isDateTimeInPast(dueDateTime)) {
+      setError('Cannot schedule a task in the past. Please select a future date and time.');
+      return;
+    }
+
     onAddTask({
       title: title.trim(),
       description: description.trim() || undefined,
@@ -44,13 +49,17 @@ export const TaskInput: React.FC<TaskInputProps> = ({ onAddTask }) => {
     setError('');
   };
 
-  // Quick preset dates
+  // Quick preset dates (strictly future)
   const setQuickDate = (type: 'today_eve' | 'tomorrow_morn' | 'weekend') => {
     const d = new Date();
     if (type === 'today_eve') {
       d.setHours(18, 0, 0, 0);
-      if (d.getTime() < Date.now()) {
+      if (d.getTime() <= Date.now()) {
         d.setHours(21, 0, 0, 0);
+        if (d.getTime() <= Date.now()) {
+          d.setDate(d.getDate() + 1);
+          d.setHours(18, 0, 0, 0);
+        }
       }
     } else if (type === 'tomorrow_morn') {
       d.setDate(d.getDate() + 1);
@@ -62,8 +71,10 @@ export const TaskInput: React.FC<TaskInputProps> = ({ onAddTask }) => {
       d.setHours(10, 0, 0, 0);
     }
     setDueDateTime(getLocalISOString(d));
+    if (error) setError('');
     setIsExpanded(true);
   };
+
 
   return (
     <form
@@ -120,10 +131,15 @@ export const TaskInput: React.FC<TaskInputProps> = ({ onAddTask }) => {
                 <input
                   type="datetime-local"
                   required
+                  min={getMinDueDateTime()}
                   value={dueDateTime}
-                  onChange={(e) => setDueDateTime(e.target.value)}
+                  onChange={(e) => {
+                    setDueDateTime(e.target.value);
+                    if (error) setError('');
+                  }}
                   className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 text-xs sm:text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
                 />
+
               </div>
 
               {/* Quick Presets */}
