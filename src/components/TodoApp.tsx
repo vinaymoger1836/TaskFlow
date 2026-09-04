@@ -437,8 +437,9 @@ const TodoContent: React.FC = () => {
             </h1>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Stay on track with smart due dates, overdue alerts, and Google Gemini AI.
+            Stay on track with smart due dates, overdue alerts, and AI automation.
           </p>
+
         </div>
 
         {/* Action buttons */}
