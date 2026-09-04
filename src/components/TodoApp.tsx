@@ -162,23 +162,26 @@ const TodoContent: React.FC = () => {
   // COPILOTKIT INTEGRATION: AI State Awareness & Automation Actions
   // -------------------------------------------------------------
 
-  useCopilotReadable({
-    description: 'Current state of user tasks, due dates, overdue statuses, and summary statistics',
-    value: {
-      tasks: tasks.map((t) => ({
-        id: t.id,
-        title: t.title,
-        description: t.description || '',
-        dueDateTime: t.dueDateTime,
-        completed: t.completed,
-        isOverdue: isTaskOverdue(t.dueDateTime, t.completed),
-      })),
-      stats,
-      currentDateTime: new Date().toISOString(),
-      currentFilter: filter,
-      searchQuery,
+  useCopilotReadable(
+    {
+      description: 'Current state of user tasks, due dates, overdue statuses, and summary statistics',
+      value: {
+        tasks: tasks.map((t) => ({
+          id: t.id,
+          title: t.title,
+          description: t.description || '',
+          dueDateTime: t.dueDateTime,
+          completed: t.completed,
+          isOverdue: isTaskOverdue(t.dueDateTime, t.completed),
+        })),
+        stats,
+        currentDateTime: new Date().toISOString(),
+        currentFilter: filter,
+        searchQuery,
+      },
     },
-  });
+    [tasks, stats, filter, searchQuery]
+  );
 
   useCopilotAction({
     name: 'addTask',
@@ -213,6 +216,53 @@ const TodoContent: React.FC = () => {
       return `Created task: "${created.title}" with due date ${created.dueDateTime}.`;
     },
   });
+
+  useCopilotAction({
+    name: 'updateTask',
+    description: 'Update the title, description, notes, or due date of an existing task.',
+    parameters: [
+      {
+        name: 'identifier',
+        type: 'string',
+        description: 'Task ID or task title to identify which task to update',
+        required: true,
+      },
+      {
+        name: 'title',
+        type: 'string',
+        description: 'New title for the task (leave empty/undefined to keep unchanged)',
+        required: false,
+      },
+      {
+        name: 'description',
+        type: 'string',
+        description: 'New description or notes for the task (leave empty/undefined to keep unchanged)',
+        required: false,
+      },
+      {
+        name: 'dueDateTime',
+        type: 'string',
+        description: 'New due date and time in ISO format (leave empty/undefined to keep unchanged)',
+        required: false,
+      },
+    ],
+    handler: async ({ identifier, title, description, dueDateTime }) => {
+      const target = tasks.find(
+        (t) => t.id === identifier || t.title.toLowerCase().includes(identifier.toLowerCase())
+      );
+      if (!target) {
+        return `Could not find a task matching "${identifier}".`;
+      }
+      const updates: Partial<Task> = {};
+      if (title !== undefined && title.trim()) updates.title = title.trim();
+      if (description !== undefined) updates.description = description.trim() || undefined;
+      if (dueDateTime !== undefined && dueDateTime.trim()) updates.dueDateTime = dueDateTime.trim();
+
+      handleUpdate(target.id, updates);
+      return `Successfully updated task "${target.title}".`;
+    },
+  });
+
 
   useCopilotAction({
     name: 'deleteTask',

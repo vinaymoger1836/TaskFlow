@@ -2,9 +2,14 @@ import {
   CopilotRuntime,
   copilotRuntimeNextJSAppRouterEndpoint,
 } from '@copilotkit/runtime';
-import { BuiltInAgent } from '@copilotkit/runtime/v2';
+import {
+  BuiltInAgent,
+  convertMessagesToVercelAISDKMessages,
+  convertToolsToVercelAITools,
+} from '@copilotkit/runtime/v2';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { streamText, stepCountIs } from 'ai';
 import { NextRequest } from 'next/server';
 
 /**
@@ -13,10 +18,8 @@ import { NextRequest } from 'next/server';
  * NOTE: For Groq and OpenAI-compatible providers, we explicitly use `.chat(modelId)`
  * instead of the default provider function. In @ai-sdk/openai v3, the default
  * calls the `/responses` endpoint (OpenAI Responses API), which Groq does not
- * support for multi-turn conversations with tool calls (causing the error:
- * "Input contains unsupported content types or unsupported content fields").
- * Calling `.chat(modelId)` targets `/chat/completions` directly, where multi-turn
- * tool calling is fully supported.
+ * support for multi-turn conversations with tool calls. Calling `.chat(modelId)`
+ * targets `/chat/completions` directly, where multi-turn tool calling is fully supported.
  */
 function getLanguageModel() {
   // 1. Google Gemini (Free at Google AI Studio: https://aistudio.google.com/)
@@ -54,13 +57,42 @@ function getLanguageModel() {
   return openai.chat(process.env.OPENAI_MODEL || 'gpt-4o-mini');
 }
 
-// Endpoint handler with per-request agent factory to prevent concurrent run conflicts
+// Endpoint handler using Factory Mode to avoid auto-injected state delta tools and provide custom system instructions
 const getHandler = () => {
   const runtime = new CopilotRuntime({
     agents: () => ({
       default: new BuiltInAgent({
-        model: getLanguageModel(),
-        maxSteps: 5,
+        type: 'aisdk',
+        factory: ({ input, abortSignal }) => {
+          const messages = convertMessagesToVercelAISDKMessages(input.messages);
+          const tools = convertToolsToVercelAITools(input.tools);
+
+          const contextParts: string[] = [];
+          if (input.context && input.context.length > 0) {
+            contextParts.push('## Current Application Context (User Tasks & Status):');
+            for (const ctx of input.context) {
+              contextParts.push(`${ctx.description}:\n${ctx.value}`);
+            }
+          }
+
+          const systemPrompt = [
+            'You are the AI assistant for TaskFlow, a modern task and todo manager.',
+            'Help the user manage their tasks using the provided tools: addTask, updateTask, deleteTask, setTaskCompletion, rescheduleTask, filterTasks, and clearCompletedTasks.',
+            'Always execute the appropriate tool when asked to add, modify, delete, reschedule, or complete tasks.',
+            ...contextParts,
+          ]
+            .filter(Boolean)
+            .join('\n\n');
+
+          return streamText({
+            model: getLanguageModel(),
+            system: systemPrompt,
+            messages,
+            tools,
+            abortSignal,
+            stopWhen: stepCountIs(5),
+          });
+        },
       }),
     }),
   });
@@ -80,4 +112,5 @@ export const GET = async (req: NextRequest) => {
   const { handleRequest } = getHandler();
   return handleRequest(req);
 };
+
 
