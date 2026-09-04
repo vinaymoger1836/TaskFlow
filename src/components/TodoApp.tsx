@@ -3,13 +3,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Task, FilterOption, SortOption, TaskStats } from '@/types/todo';
 import { loadTasksFromStorage, saveTasksToStorage } from '@/utils/storage';
-import { isTaskOverdue } from '@/utils/dateUtils';
+import { isTaskOverdue, getDefaultDueDateTime, getLocalISOString } from '@/utils/dateUtils';
 import { TaskInput } from './TaskInput';
 import { TaskList } from './TaskList';
 import { TaskFilters } from './TaskFilters';
 import { TaskSort } from './TaskSort';
 import { TaskStatsComponent } from './TaskStats';
-import { CheckSquare, Sparkles, RefreshCw, Trash2 } from 'lucide-react';
+import { CheckSquare, Trash2, Bot } from 'lucide-react';
+import { useCopilotAction, useCopilotReadable } from '@copilotkit/react-core';
+import { CopilotSidebar } from '@copilotkit/react-ui';
 
 export const TodoApp: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -20,7 +22,6 @@ export const TodoApp: React.FC = () => {
     field: 'dueDateTime',
     direction: 'asc',
   });
-  // Time tick to automatically refresh overdue badges every 30 seconds
   const [, setTick] = useState(0);
 
   // Initialize from storage on mount
@@ -68,9 +69,7 @@ export const TodoApp: React.FC = () => {
 
   // Filter and Sort Tasks
   const filteredAndSortedTasks = useMemo(() => {
-    // 1. Filter
     const filtered = tasks.filter((t) => {
-      // Keyword search
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
         const matchesTitle = t.title.toLowerCase().includes(query);
@@ -78,14 +77,12 @@ export const TodoApp: React.FC = () => {
         if (!matchesTitle && !matchesDesc) return false;
       }
 
-      // Tab filter
       if (filter === 'active') return !t.completed;
       if (filter === 'completed') return t.completed;
       if (filter === 'overdue') return isTaskOverdue(t.dueDateTime, t.completed);
-      return true; // 'all'
+      return true;
     });
 
-    // 2. Sort
     return filtered.sort((a, b) => {
       let comparison = 0;
 
@@ -100,7 +97,6 @@ export const TodoApp: React.FC = () => {
       } else if (sortOption.field === 'title') {
         comparison = a.title.localeCompare(b.title);
       } else if (sortOption.field === 'status') {
-        // Active tasks first by default
         comparison = Number(a.completed) - Number(b.completed);
       }
 
@@ -117,7 +113,7 @@ export const TodoApp: React.FC = () => {
     const newTask: Task = {
       id: `task-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       title: newTaskData.title,
-      description: newTaskDataDataCheck(newTaskData.description),
+      description: newTaskData.description ? newTaskData.description.trim() : undefined,
       dueDateTime: newTaskData.dueDateTime,
       completed: false,
       createdAt: new Date().toISOString(),
@@ -125,9 +121,8 @@ export const TodoApp: React.FC = () => {
     };
 
     setTasks((prev) => [newTask, ...prev]);
+    return newTask;
   };
-
-  const newTaskDataDataCheck = (desc?: string) => (desc ? desc.trim() : undefined);
 
   const handleToggleComplete = (id: string) => {
     setTasks((prev) =>
@@ -154,10 +149,193 @@ export const TodoApp: React.FC = () => {
   };
 
   const handleClearCompleted = () => {
-    if (confirm('Are you sure you want to remove all completed tasks?')) {
-      setTasks((prev) => prev.filter((t) => !t.completed));
-    }
+    setTasks((prev) => prev.filter((t) => !t.completed));
   };
+
+  // -------------------------------------------------------------
+  // COPILOTKIT INTEGRATION: AI State Awareness & Automation Actions
+  // -------------------------------------------------------------
+
+  // 1. Give the AI real-time context about tasks, current time, and overdue items
+  useCopilotReadable({
+    description: 'Current state of user tasks, due dates, overdue statuses, and summary statistics',
+    value: {
+      tasks: tasks.map((t) => ({
+        id: t.id,
+        title: t.title,
+        description: t.description || '',
+        dueDateTime: t.dueDateTime,
+        completed: t.completed,
+        isOverdue: isTaskOverdue(t.dueDateTime, t.completed),
+      })),
+      stats,
+      currentDateTime: new Date().toISOString(),
+      currentFilter: filter,
+      searchQuery,
+    },
+  });
+
+  // 2. Action: Add a new task
+  useCopilotAction({
+    name: 'addTask',
+    description: 'Create a new task with a title, optional description, and a due date/time (ISO 8601 string).',
+    parameters: [
+      {
+        name: 'title',
+        type: 'string',
+        description: 'The title or name of the task to create',
+        required: true,
+      },
+      {
+        name: 'dueDateTime',
+        type: 'string',
+        description: 'Due date and time in ISO format (YYYY-MM-DDTHH:mm), e.g. 2026-09-05T15:00',
+        required: true,
+      },
+      {
+        name: 'description',
+        type: 'string',
+        description: 'Optional additional notes or description for the task',
+        required: false,
+      },
+    ],
+    handler: async ({ title, dueDateTime, description }) => {
+      const finalDue = dueDateTime || getDefaultDueDateTime();
+      const created = handleAddTask({
+        title,
+        dueDateTime: finalDue,
+        description,
+      });
+      return `Created task: "${created.title}" with due date ${created.dueDateTime}.`;
+    },
+  });
+
+  // 3. Action: Delete task
+  useCopilotAction({
+    name: 'deleteTask',
+    description: 'Delete a task from the list by its ID or by matching title.',
+    parameters: [
+      {
+        name: 'identifier',
+        type: 'string',
+        description: 'Task ID or task title to delete',
+        required: true,
+      },
+    ],
+    handler: async ({ identifier }) => {
+      const target = tasks.find(
+        (t) => t.id === identifier || t.title.toLowerCase().includes(identifier.toLowerCase())
+      );
+      if (!target) {
+        return `Could not find a task matching "${identifier}".`;
+      }
+      handleDelete(target.id);
+      return `Deleted task: "${target.title}".`;
+    },
+  });
+
+  // 4. Action: Toggle or set task completion
+  useCopilotAction({
+    name: 'setTaskCompletion',
+    description: 'Mark a task as complete or incomplete by its ID or title.',
+    parameters: [
+      {
+        name: 'identifier',
+        type: 'string',
+        description: 'Task ID or task title',
+        required: true,
+      },
+      {
+        name: 'completed',
+        type: 'boolean',
+        description: 'True to mark as complete/done, false to mark as incomplete/pending',
+        required: true,
+      },
+    ],
+    handler: async ({ identifier, completed }) => {
+      const target = tasks.find(
+        (t) => t.id === identifier || t.title.toLowerCase().includes(identifier.toLowerCase())
+      );
+      if (!target) {
+        return `Could not find a task matching "${identifier}".`;
+      }
+      if (target.completed !== completed) {
+        handleToggleComplete(target.id);
+      }
+      return `Marked "${target.title}" as ${completed ? 'completed' : 'incomplete'}.`;
+    },
+  });
+
+  // 5. Action: Reschedule task (especially useful for overdue tasks!)
+  useCopilotAction({
+    name: 'rescheduleTask',
+    description: 'Update the due date and time of an existing task (e.g. reschedule overdue items).',
+    parameters: [
+      {
+        name: 'identifier',
+        type: 'string',
+        description: 'Task ID or task title',
+        required: true,
+      },
+      {
+        name: 'newDueDateTime',
+        type: 'string',
+        description: 'The new due date/time in ISO format (YYYY-MM-DDTHH:mm)',
+        required: true,
+      },
+    ],
+    handler: async ({ identifier, newDueDateTime }) => {
+      const target = tasks.find(
+        (t) => t.id === identifier || t.title.toLowerCase().includes(identifier.toLowerCase())
+      );
+      if (!target) {
+        return `Could not find a task matching "${identifier}".`;
+      }
+      handleUpdate(target.id, { dueDateTime: newDueDateTime });
+      return `Rescheduled "${target.title}" to ${newDueDateTime}.`;
+    },
+  });
+
+  // 6. Action: Filter and Search
+  useCopilotAction({
+    name: 'filterTasks',
+    description: 'Filter or search the tasks in the view.',
+    parameters: [
+      {
+        name: 'filter',
+        type: 'string',
+        description: 'Filter mode: "all", "active", "completed", or "overdue"',
+        required: false,
+      },
+      {
+        name: 'searchQuery',
+        type: 'string',
+        description: 'Search keyword to filter by (or empty string to clear search)',
+        required: false,
+      },
+    ],
+    handler: async ({ filter: newFilter, searchQuery: newSearch }) => {
+      if (newFilter && ['all', 'active', 'completed', 'overdue'].includes(newFilter)) {
+        setFilter(newFilter as FilterOption);
+      }
+      if (newSearch !== undefined) {
+        setSearchQuery(newSearch);
+      }
+      return `View updated (filter: ${newFilter || filter}, search: "${newSearch ?? searchQuery}").`;
+    },
+  });
+
+  // 7. Action: Clear all completed tasks
+  useCopilotAction({
+    name: 'clearCompletedTasks',
+    description: 'Remove all finished / completed tasks from the list.',
+    parameters: [],
+    handler: async () => {
+      const completedCount = tasks.filter((t) => t.completed).length;
+      handleClearCompleted();
+      return `Cleared ${completedCount} completed tasks.`;
+    },
+  });
 
   if (!isLoaded) {
     return (
@@ -182,11 +360,11 @@ export const TodoApp: React.FC = () => {
             </h1>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Stay on track with smart due dates, overdue alerts, and easy sorting.
+            Stay on track with smart due dates, overdue alerts, and AI automation.
           </p>
         </div>
 
-        {/* Action badges */}
+        {/* Action buttons */}
         <div className="flex items-center gap-2">
           {stats.completed > 0 && (
             <button
@@ -244,6 +422,22 @@ export const TodoApp: React.FC = () => {
           }}
         />
       </main>
+
+      {/* Copilot AI Assistant Sidebar */}
+      <CopilotSidebar
+        instructions={
+          'You are TaskFlow AI, an intelligent personal task manager. ' +
+          'You can add tasks with date/time, mark tasks complete or incomplete, delete tasks, ' +
+          'reschedule overdue tasks, and filter or search tasks. ' +
+          'Always use the provided actions (addTask, deleteTask, setTaskCompletion, rescheduleTask, filterTasks, clearCompletedTasks) to modify the state directly.'
+        }
+        labels={{
+          title: 'TaskFlow AI Copilot',
+          initial: 'Hi! I can help automate your tasks. Try asking:\n• "Add a task: Review roadmap tomorrow at 4 PM"\n• "What tasks are overdue?"\n• "Mark the completed tasks done"\n• "Reschedule overdue tasks to tomorrow"',
+        }}
+        defaultOpen={false}
+        clickOutsideToClose={true}
+      />
     </div>
   );
 };

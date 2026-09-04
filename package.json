@@ -13,6 +13,9 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@copilotkit/react-core": "^1.70.1",
+    "@copilotkit/react-ui": "^1.70.1",
+    "@copilotkit/runtime": "^1.70.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.40.0",
     "next": "^15.1.7",

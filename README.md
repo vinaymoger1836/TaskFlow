@@ -1,9 +1,15 @@
-# TaskFlow - Modern Next.js Todo Application
+# TaskFlow - Modern Next.js Todo Application with AI Copilot
 
-A responsive, visually appealing, and feature-complete Todo web application built with **Next.js 15 (App Router)**, **React 19**, **TypeScript**, and **Tailwind CSS**.
+A responsive, visually appealing, and feature-complete Todo web application built with **Next.js 15 (App Router)**, **React 19**, **TypeScript**, **Tailwind CSS**, and **CopilotKit**.
 
 ## ✨ Features
 
+- **🤖 AI Task Automation (CopilotKit)**:
+  - Natural language task creation (e.g. *"Schedule team retrospective tomorrow at 3 PM"*).
+  - Smart rescheduling (e.g. *"Reschedule all overdue tasks to tomorrow morning"*).
+  - Status management (e.g. *"Mark the review task as completed"*).
+  - Natural language filtering and searching.
+  - Floating AI assistant chat bubble (`<CopilotPopup>`).
 - **Add Tasks with Due Date & Time**: Schedule tasks with precise target timestamps using a native `datetime-local` picker or convenient quick presets (*Tonight*, *Tomorrow*, *This Weekend*).
 - **Overdue Detection & Highlight**: Automatically detects and highlights past-due incomplete tasks with prominent pulsating alert badges, warning ribbons, and dynamic time elapsed calculation (e.g. *Overdue by 2h 15m*).
 - **Complete & Incomplete Toggle**: Check off finished tasks with smooth strikethrough styling and completion timestamps, or toggle them back to pending.
@@ -22,9 +28,14 @@ A responsive, visually appealing, and feature-complete Todo web application buil
 
 ## 🚀 Getting Started
 
-### 1. Install Dependencies
+### 1. Configure Environment Variables
+Copy `.env.example` to `.env.local`:
 ```bash
-npm install
+cp .env.example .env.local
+```
+Add your OpenAI API key:
+```env
+OPENAI_API_KEY=your_openai_api_key_here
 ```
 
 ### 2. Run the Development Server
@@ -46,22 +57,28 @@ npm run start
 ToDo/
 ├── src/
 │   ├── app/
+│   │   ├── api/
+│   │   │   └── copilotkit/
+│   │   │       └── route.ts # CopilotKit Next.js App Router API endpoint
 │   │   ├── globals.css      # Tailwind directives and custom variables
-│   │   ├── layout.tsx       # Root layout and metadata
+│   │   ├── layout.tsx       # Root layout wrapping CopilotProvider
 │   │   └── page.tsx         # Main entry page
 │   ├── components/
+│   │   ├── CopilotProvider.tsx # Client-side CopilotKit provider wrapper
 │   │   ├── TaskFilters.tsx  # Filter tabs & search bar
 │   │   ├── TaskInput.tsx    # New task form with datetime picker
 │   │   ├── TaskItem.tsx     # Single task with overdue badge & inline edit
 │   │   ├── TaskList.tsx     # Task list with empty state illustrations
 │   │   ├── TaskSort.tsx     # Sort controls (field & direction)
 │   │   ├── TaskStats.tsx    # Summary metrics (Total, Active, Done, Overdue)
-│   │   └── TodoApp.tsx      # Main application state and orchestration
+│   │   └── TodoApp.tsx      # Main application state, CopilotKit hooks & popup
 │   ├── types/
 │   │   └── todo.ts          # TypeScript interfaces
 │   └── utils/
 │       ├── dateUtils.ts     # Due date calculations, overdue checks, formatting
-│       └── storage.ts       # LocalStorage helpers & initial demo tasks
+│       └── storage.ts       # LocalStorage helpers (clean initial state)
+├── .env.example             # Template for API keys
+├── .gitignore               # Comprehensive ignore rules
 ├── next.config.mjs          # Next.js configuration
 ├── tailwind.config.ts       # Tailwind CSS configuration
 ├── postcss.config.mjs       # PostCSS configuration
